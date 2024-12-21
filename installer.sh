@@ -964,17 +964,17 @@ check_bash() {
     [[ "$1" == "debug" ]] && debug_enabled="true"
 
     # Debug logging: Start of check
-    $debug_enabled && logD "Debug: Starting Bash environment check."
+    $debug_enabled && logD "Starting Bash environment check."
 
     # Ensure the script is running in a Bash shell
     if [[ -z "$BASH_VERSION" ]]; then
         logE "This script requires Bash. Please run it with Bash."
-        $debug_enabled && logD "Debug: BASH_VERSION is empty or undefined."
+        $debug_enabled && logD "BASH_VERSION is empty or undefined."
         exit 1
     fi
 
     # Debug logging: Successful check
-    $debug_enabled && logD "Debug: Bash environment is valid. Detected Bash version: $BASH_VERSION."
+    $debug_enabled && logD "Bash environment is valid. Detected Bash version: $BASH_VERSION."
 }
 
 ##
@@ -998,10 +998,10 @@ check_sh_ver() {
 
     local required_version="${MIN_BASH_VERSION:-none}"
 
-    $debug_enabled && logD "Debug: Minimum required Bash version is set to '$required_version'."
+    $debug_enabled && logD "Minimum required Bash version is set to '$required_version'."
 
     if [[ "$required_version" == "none" ]]; then
-        $debug_enabled && logD "Debug: Bash version check is disabled (MIN_BASH_VERSION='none')."
+        $debug_enabled && logD "Bash version check is disabled (MIN_BASH_VERSION='none')."
         return 0
     fi
 
@@ -1010,17 +1010,17 @@ check_sh_ver() {
     local required_minor="${required_version##*.}"
 
     # Log the current Bash version
-    $debug_enabled && logD "Debug: Current Bash version is ${BASH_VERSINFO[0]}.${BASH_VERSINFO[1]}."
+    $debug_enabled && logD "Current Bash version is ${BASH_VERSINFO[0]}.${BASH_VERSINFO[1]}."
 
     # Compare the current Bash version against the required version
     if (( BASH_VERSINFO[0] < required_major || 
           (BASH_VERSINFO[0] == required_major && 
            BASH_VERSINFO[1] < required_minor) )); then
-        $debug_enabled && logD "Debug: Current Bash version does not meet the requirement."
+        $debug_enabled && logD "Current Bash version does not meet the requirement."
         die 1 "This script requires Bash version $required_version or newer."
     fi
 
-    $debug_enabled && logD "Debug: Current Bash version meets the requirement."
+    $debug_enabled && logD "Current Bash version meets the requirement."
 }
 
 ##
@@ -1044,31 +1044,31 @@ check_bitness() {
 
     # Detect the system bitness
     bitness=$(getconf LONG_BIT)
-    $debug_enabled && logD "Debug: Detected system bitness: $bitness-bit."
+    $debug_enabled && logD "Detected system bitness: $bitness-bit."
 
     case "$SUPPORTED_BITNESS" in
         "32")
-            $debug_enabled && logD "Debug: Script supports only 32-bit systems."
+            $debug_enabled && logD "Script supports only 32-bit systems."
             if [[ "$bitness" -ne 32 ]]; then
                 die 1 "Only 32-bit systems are supported. Detected $bitness-bit system."
             fi
             ;;
         "64")
-            $debug_enabled && logD "Debug: Script supports only 64-bit systems."
+            $debug_enabled && logD "Script supports only 64-bit systems."
             if [[ "$bitness" -ne 64 ]]; then
                 die 1 "Only 64-bit systems are supported. Detected $bitness-bit system."
             fi
             ;;
         "both")
-            $debug_enabled && logD "Debug: Script supports both 32-bit and 64-bit systems."
+            $debug_enabled && logD "Script supports both 32-bit and 64-bit systems."
             ;;
         *)
-            $debug_enabled && logD "Debug: Invalid SUPPORTED_BITNESS configuration: '$SUPPORTED_BITNESS'."
+            $debug_enabled && logD "Invalid SUPPORTED_BITNESS configuration: '$SUPPORTED_BITNESS'."
             die 1 "Configuration error: Invalid value for SUPPORTED_BITNESS ('$SUPPORTED_BITNESS')."
             ;;
     esac
 
-    $debug_enabled && logD "Debug: System bitness check passed for $bitness-bit system."
+    $debug_enabled && logD "System bitness check passed for $bitness-bit system."
 }
 
 ##
@@ -1198,7 +1198,6 @@ check_arch() {
 # shellcheck disable=SC2120
 validate_proxy() {
     local proxy_url="$1"
-    local test_url="http://google.com"
 
     # Default to global proxy settings if no proxy is provided
     [[ -z "$proxy_url" ]] && proxy_url="${http_proxy:-$https_proxy}"
@@ -1308,14 +1307,14 @@ check_internet() {
     local proxy_valid=false
 
     # Debug mode enabled
-    $debug_enabled && logD "Debug: Starting internet connectivity checks."
+    $debug_enabled && logD "Starting internet connectivity checks."
 
     # Validate proxy settings if a proxy is configured
     if [[ -n "$http_proxy" || -n "$https_proxy" ]]; then
-        $debug_enabled && logD "Debug: Proxy detected. Validating proxy configuration."
+        $debug_enabled && logD "Proxy detected. Validating proxy configuration."
         if validate_proxy; then
             proxy_valid=true
-            $debug_enabled && logD "Debug: Proxy validation succeeded."
+            $debug_enabled && logD "Proxy validation succeeded."
         else
             logW "Proxy validation failed. Proceeding with direct connectivity checks."
         fi
@@ -1323,43 +1322,43 @@ check_internet() {
 
     # Check internet connectivity with curl
     if command -v curl &>/dev/null; then
-        $debug_enabled && logD "Debug: curl is available. Testing internet connectivity using curl."
+        $debug_enabled && logD "curl is available. Testing internet connectivity using curl."
         if $proxy_valid && check_url "$primary_url" "curl" "--silent --head --max-time 10 --proxy ${http_proxy:-$https_proxy}"; then
             logI "Internet is available using curl with proxy."
-            $debug_enabled && logD "Debug: curl successfully connected via proxy."
+            $debug_enabled && logD "curl successfully connected via proxy."
             return 0
         elif check_url "$primary_url" "curl" "--silent --head --max-time 10"; then
             $debug_enabled && logI "Internet is available using curl without proxy."
-            $debug_enabled && logD "Debug: curl successfully connected without proxy."
+            $debug_enabled && logD "curl successfully connected without proxy."
             return 0
         else
-            $debug_enabled && logD "Debug: curl failed to connect."
+            $debug_enabled && logD "curl failed to connect."
         fi
     else
-        $debug_enabled && logD "Debug: curl is not available."
+        $debug_enabled && logD "curl is not available."
     fi
 
     # Check internet connectivity with wget
     if command -v wget &>/dev/null; then
-        $debug_enabled && logD "Debug: wget is available. Testing internet connectivity using wget."
+        $debug_enabled && logD "wget is available. Testing internet connectivity using wget."
         if $proxy_valid && check_url "$primary_url" "wget" "--spider --quiet --timeout=10 --proxy=${http_proxy:-$https_proxy}"; then
             logI "Internet is available using wget with proxy."
-            $debug_enabled && logD "Debug: wget successfully connected via proxy."
+            $debug_enabled && logD "wget successfully connected via proxy."
             return 0
         elif check_url "$secondary_url" "wget" "--spider --quiet --timeout=10"; then
             logI "Internet is available using wget without proxy."
-            $debug_enabled && logD "Debug: wget successfully connected without proxy."
+            $debug_enabled && logD "wget successfully connected without proxy."
             return 0
         else
-            $debug_enabled && logD "Debug: wget failed to connect."
+            $debug_enabled && logD "wget failed to connect."
         fi
     else
-        $debug_enabled && logD "Debug: wget is not available."
+        $debug_enabled && logD "wget is not available."
     fi
 
     # Final failure message
     logE "No internet connection detected after all checks."
-    $debug_enabled && logD "Debug: All internet connectivity tests failed."
+    $debug_enabled && logD "All internet connectivity tests failed."
     return 1
 }
 
@@ -1562,7 +1561,7 @@ init_log() {
     if [[ -d "$log_dir" && -w "$log_dir" ]]; then
         # Attempt to create the log file
         if ! touch "$LOG_FILE" &>/dev/null; then
-            printf "ERROR: Cannot create log file: %s\n" "$LOG_FILE" >&2
+            warn "Cannot create log file: $LOG_FILE"
             log_dir="/tmp"
         fi
     else
@@ -1573,12 +1572,12 @@ init_log() {
     if [[ "$log_dir" == "/tmp" ]]; then
         fallback_log="/tmp/$scriptname.log"
         LOG_FILE="$fallback_log"
-        printf "WARNING: Falling back to log file in /tmp: %s\n" "$LOG_FILE" >&2
+        warn "Falling back to log file in /tmp: $LOG_FILE"
     fi
 
     # Attempt to create the log file in the fallback location
     if ! touch "$LOG_FILE" &>/dev/null; then
-        die "Unable to create log file even in fallback location: $LOG_FILE"
+        die 1 "Unable to create log file even in fallback location: $LOG_FILE"
     fi
 
     readonly LOG_FILE
@@ -1880,14 +1879,12 @@ get_git_branch() {
         # Handle the detached HEAD state: attempt to determine the source.
         detached_from=$(git reflog show --pretty='%gs' | grep -oE 'checkout: moving from [^ ]+' | head -n 1 | awk '{print $NF}')
         if [[ -n "$detached_from" ]]; then
-            printf "Detached from branch: %s\n" "$detached_from"
+            die 1 "Detached from branch: $detached_from"
         else
-            printf "Detached HEAD state: Cannot determine the source branch.\n" >&2
-            exit 1
+            die 1 "Detached HEAD state: Cannot determine the source branch."
         fi
     else
-        printf "Error: Not inside a Git repository.\n" >&2
-        exit 1
+        die 1 "Not inside a Git repository."
     fi
 }
 
@@ -2101,7 +2098,7 @@ set_time() {
         logW "Timezone detected as $tz, which may need to be updated."
         return
     else
-        logt "Timezone detected as $tz."
+        logI "Timezone detected as $tz."
     fi
 
     # Inform the user about the current date and time
@@ -2205,7 +2202,7 @@ exec_command() {
 handle_apt_packages() {
     # Check if APT_PACKAGES is empty
     if [[ ${#APT_PACKAGES[@]} -eq 0 ]]; then
-        logD "No packages specified in APT_PACKAGES. Skipping package handling."
+        logI "No packages specified in APT_PACKAGES. Skipping package handling."
         return 0
     fi
 
