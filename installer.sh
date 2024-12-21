@@ -1,6 +1,50 @@
 #!/usr/bin/env bash
 
 ##
+# @file
+# @brief Comprehensive Bash script template with advanced functionality.
+#
+# @details
+# This script provides a robust framework for managing installation processes
+# with extensive logging, error handling, and system validation. It includes:
+# - Detailed stack traces for debugging.
+# - Dynamic logging configuration with support for various levels (DEBUG, INFO, etc.).
+# - System checks for compatibility with OS versions, architectures, dependencies, and environment variables.
+# - Internet connectivity validation with proxy support.
+# - Git repository context retrieval and semantic versioning utilities.
+#
+# @author Lee Bussy
+# @date December 21, 2024
+# @version 1.0.0
+#
+# @copyright
+# This script is open-source and can be modified or distributed under the terms
+# of the MIT license.
+#
+# @par Usage:
+# ```bash
+# ./script_name.sh [OPTIONS]
+# ```
+# Run `./script_name.sh --help` for detailed options.
+#
+# @par Requirements:
+# - Bash version 4.0 or higher.
+# - Dependencies as specified in the `DEPENDENCIES` array.
+#
+# @par Features:
+# - Comprehensive environment validation (Bash, OS, dependencies, etc.).
+# - Automatic Git context resolution for local and remote repositories.
+# - Semantic version generation based on Git tags and commit history.
+# - Flexible logging with customizable verbosity and output locations.
+#
+# @see
+# Refer to the repository README for detailed function-level explanations.
+#
+# @warning
+# Ensure this script is executed with appropriate permissions (e.g., sudo for installation tasks).
+##
+
+##
 # @brief Trap unexpected errors during script execution.
 # @details Captures any errors (via the ERR signal) that occur during script execution.
 # Logs the function name and line number where the error occurred and exits the script.
