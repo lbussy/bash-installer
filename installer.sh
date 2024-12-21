@@ -318,7 +318,7 @@ declare -ar SYSTEM_READS=(
 readonly SYSTEM_READS
 
 ##
-# @var APTPACKAGES
+# @var APT_PACKAGES
 # @type array
 # @brief List of required APT packages.
 # @details
@@ -333,12 +333,7 @@ readonly SYSTEM_READS
 # - `libraspberrypi-dev`: Development libraries for Raspberry Pi.
 # - `raspberrypi-kernel-headers`: Kernel headers for Raspberry Pi.
 ##
-readonly APTPACKAGES=(
-    "apache2"
-    "php"
-    "jq"
-    "libraspberrypi-dev"
-    "raspberrypi-kernel-headers"
+readonly APT_PACKAGES=(
 )
 
 ##
@@ -2198,14 +2193,22 @@ exec_command() {
 }
 
 ##
-# @brief Installs or upgrades all packages in the APTPACKAGES list.
+# @brief Installs or upgrades all packages in the APT_PACKAGES list.
 # @details Updates the package list and resolves broken dependencies before proceeding.
 #
 # Accumulates errors for each failed package and logs a summary at the end.
 #
+# Skips execution if the APT_PACKAGES array is empty.
+#
 # @return Logs the success or failure of each operation.
 ##
 handle_apt_packages() {
+    # Check if APT_PACKAGES is empty
+    if [[ ${#APT_PACKAGES[@]} -eq 0 ]]; then
+        logD "No packages specified in APT_PACKAGES. Skipping package handling."
+        return 0
+    fi
+
     local package error_count=0  # Counter for failed operations
 
     logI "Updating and managing required packages (this may take a few minutes)."
@@ -2221,7 +2224,7 @@ handle_apt_packages() {
     fi
 
     # Install or upgrade each package in the list
-    for package in "${APTPACKAGES[@]}"; do
+    for package in "${APT_PACKAGES[@]}"; do
         if dpkg-query -W -f='${Status}' "$package" 2>/dev/null | grep -q "install ok installed"; then
             if ! exec_command "Upgrade $package" "sudo apt-get install --only-upgrade -y $package"; then
                 logW "Failed to upgrade package: $package."
