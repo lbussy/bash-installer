@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+set -uo pipefail # Setting -e is far too much work here
+IFS=$'\n\t'
 
 ##
 # @file
@@ -74,6 +76,12 @@ trap_error() {
 ############
 ### Global Script Declarations
 ############
+
+#/**
+# * @var DRY_RUN
+# * @brief Allows simulated execution of certain commands
+# */
+declare DRY_RUN="${DRY_RUN:-false}" # Use existing value, or default to "false".
 
 #/**
 # * @var THIS_SCRIPT
@@ -356,7 +364,7 @@ COLUMNS="${COLUMNS:-80}"  # Default to 80 columns if unset
 # - `/proc/device-tree/compatible`: Identifies the hardware compatibility (commonly used in embedded systems).
 ##
 declare -ar SYSTEM_READS=(
-    "/etc/os-release"                # OS identification file
+    "/etc/os-release"               # OS identification file
     "/proc/device-tree/compatible"  # Hardware compatibility file
 )
 readonly SYSTEM_READS
@@ -413,7 +421,7 @@ pad_with_spaces() {
     local width="${2:-4}"   # Optional width (default is 4)
 
     # Validate input
-    if [[ -z "$number" || ! "$number" =~ ^[0-9]+$ ]]; then
+    if [[ -z "${number:-}" || ! "$number" =~ ^[0-9]+$ ]]; then
         die 1 "Input must be a valid non-negative integer."
     fi
 
@@ -608,7 +616,7 @@ die() {
         "$tag" "$script" "$lineno" "$exit_status" >&2
 
     # Call stack_trace with processed message and error level
-    if [[ -z "$message" ]]; then
+    if [[ -z "${message:-}" ]]; then
         stack_trace "$level" "Stack trace from line $lineno."
     else
         stack_trace "$level" "Stack trace from line $lineno: $message"
@@ -629,13 +637,13 @@ add_dot() {
     local input="$1"  # Input string to process
 
     # Validate input
-    if [[ -z "$input" ]]; then
-        warn "ERROR" "Input to add_dot cannot be empty."
+    if [[ -z "${input:-}" ]]; then
+        warn "Input to add_dot cannot be empty."
         return 1
     fi
 
     # Add a leading dot if it's missing
-    if [[ "$input" != .* ]]; then
+    if [[ "${input:-}" != .* ]]; then
         input=".$input"
     fi
 
@@ -653,7 +661,7 @@ remove_dot() {
     local input="$1"  # Input string to process
 
     # Validate input
-    if [[ -z "$input" ]]; then
+    if [[ -z "${input:-}" ]]; then
         warn "ERROR" "Input to remove_dot cannot be empty."
         return 1
     fi
@@ -677,7 +685,7 @@ add_slash() {
     local input="$1"  # Input string to process
 
     # Validate input
-    if [[ -z "$input" ]]; then
+    if [[ -z "${input:-}" ]]; then
         warn "ERROR" "Input to add_slash cannot be empty."
         return 1
     fi
@@ -701,7 +709,7 @@ remove_slash() {
     local input="$1"  # Input string to process
 
     # Validate input
-    if [[ -z "$input" ]]; then
+    if [[ -z "${input:-}" ]]; then
         warn "ERROR" "Input to remove_slash cannot be empty."
         return 1
     fi
@@ -735,7 +743,7 @@ print_system() {
     system_name=$(grep '^PRETTY_NAME=' /etc/os-release 2>/dev/null | cut -d '=' -f2 | tr -d '"')
 
     # Check if system_name is empty
-    if [[ -z "$system_name" ]]; then
+    if [[ -z "${system_name:-}" ]]; then
         logW "System: Unknown (could not extract system information)." # Warning if system information is unavailable
     else
         logI "System: $system_name." # Log the system information
@@ -857,9 +865,10 @@ determine_execution_context() {
 #shellcheck disable=2120
 handle_execution_context() {
     local debug_enabled="false"
-    [[ "$1" == "debug" ]] && debug_enabled="true"
+    [[ "${1:-}" == "debug" ]] && debug_enabled="true"
 
     # Call determine_execution_context and capture its output
+
     determine_execution_context
     local context=$?  # Capture the return code to determine context
 
@@ -928,7 +937,7 @@ handle_execution_context() {
 enforce_sudo() {
     if [[ "$REQUIRE_SUDO" == true ]]; then
         if [[ "$EUID" -eq 0 && -n "$SUDO_USER" && "$SUDO_COMMAND" == *"$0"* ]]; then
-            return  # Script is properly executed with `sudo`
+            return 0  # Script is properly executed with `sudo`
         elif [[ "$EUID" -eq 0 && -n "$SUDO_USER" ]]; then
             die 1 "This script should not be run from a root shell." \
                   "Run it with 'sudo $THIS_SCRIPT' as a regular user."
@@ -966,7 +975,7 @@ validate_depends() {
 
     if ((missing > 0)); then
         logE "Missing $missing dependencies. Install them and re-run the script."
-        exit 1
+        exit_script 1
     fi
 }
 
@@ -1011,7 +1020,7 @@ validate_env_vars() {
     local var        # Iterator for environment variables
 
     for var in "${ENV_VARS[@]}"; do
-        if [[ -z "${!var}" ]]; then
+        if [[ -z "${!var:-}" ]]; then
             printf "ERROR: Missing environment variable: %s\n" "$var" >&2
             ((missing++))
         fi
@@ -1037,16 +1046,16 @@ validate_env_vars() {
 # shellcheck disable=SC2120
 check_bash() {
     local debug_enabled="false"
-    [[ "$1" == "debug" ]] && debug_enabled="true"
+    [[ "${1:-}" == "debug" ]] && debug_enabled="true"
 
     # Debug logging: Start of check
     $debug_enabled && logD "Starting Bash environment check."
 
     # Ensure the script is running in a Bash shell
-    if [[ -z "$BASH_VERSION" ]]; then
+    if [[ -z "${BASH_VERSION:-}" ]]; then
         logE "This script requires Bash. Please run it with Bash."
         $debug_enabled && logD "BASH_VERSION is empty or undefined."
-        exit 1
+        exit_script 1
     fi
 
     # Debug logging: Successful check
@@ -1070,7 +1079,7 @@ check_bash() {
 # shellcheck disable=SC2120
 check_sh_ver() {
     local debug_enabled="false"
-    [[ "$1" == "debug" ]] && debug_enabled="true"
+    [[ "${1:-}" == "debug" ]] && debug_enabled="true"
 
     local required_version="${MIN_BASH_VERSION:-none}"
 
@@ -1114,7 +1123,7 @@ check_sh_ver() {
 # shellcheck disable=SC2120
 check_bitness() {
     local debug_enabled="false"
-    [[ "$1" == "debug" ]] && debug_enabled="true"
+    [[ "${1:-}" == "debug" ]] && debug_enabled="true"
 
     local bitness  # Stores the detected bitness of the system.
 
@@ -1163,7 +1172,7 @@ check_bitness() {
 check_release() {
     local ver  # Holds the extracted version ID from /etc/os-release.
     local debug_enabled="false"
-    [[ "$1" == "debug" ]] && debug_enabled="true"
+    [[ "${1:-}" == "debug" ]] && debug_enabled="true"
 
     # Ensure the file exists and is readable.
     if [[ ! -f /etc/os-release || ! -r /etc/os-release ]]; then
@@ -1171,12 +1180,15 @@ check_release() {
     fi
 
     # Extract the VERSION_ID from /etc/os-release.
-    if ! ver=$(grep "VERSION_ID" /etc/os-release 2>/dev/null | awk -F "=" '{print $2}' | tr -d '"'); then
-        die 1 "Failed to extract version information from /etc/os-release."
+    if [[ -f /etc/os-release ]]; then
+        ver=$(grep "VERSION_ID" /etc/os-release | awk -F "=" '{print $2}' | tr -d '"')
+    else
+        logE "File /etc/os-release not found."
+        ver="unknown"
     fi
 
     # Ensure the extracted version is not empty.
-    if [[ -z "$ver" ]]; then
+    if [[ -z "${ver:-}" ]]; then
         die 1 "VERSION_ID is missing or empty in /etc/os-release."
     fi
 
@@ -1214,7 +1226,7 @@ check_arch() {
     local detected_model is_supported key full_name model chip
 
     local debug_enabled="false"
-    [[ "$1" == "debug" ]] && debug_enabled="true"
+    [[ "${1:-}" == "debug" ]] && debug_enabled="true"
 
     # Attempt to read and process the compatible string
     if ! detected_model=$(cat /proc/device-tree/compatible 2>/dev/null | tr '\0' '\n' | grep "raspberrypi" | sed 's/raspberrypi,//'); then
@@ -1222,7 +1234,7 @@ check_arch() {
     fi
 
     # Check if the detected model is empty
-    if [[ -z "$detected_model" ]]; then
+    if [[ -z "${detected_model:-}" ]]; then
         die 1 "No Raspberry Pi model found in /proc/device-tree/compatible. This system may not be supported."
     fi
 
@@ -1276,10 +1288,10 @@ validate_proxy() {
     local proxy_url="$1"
 
     # Default to global proxy settings if no proxy is provided
-    [[ -z "$proxy_url" ]] && proxy_url="${http_proxy:-$https_proxy}"
+    [[ -z "${proxy_url:-}" ]] && proxy_url="${http_proxy:-$https_proxy}"
 
     # Validate that a proxy is set
-    if [[ -z "$proxy_url" ]]; then
+    if [[ -z "${proxy_url:-}" ]]; then
         logW "No proxy URL configured for validation."
         return 1
     fi
@@ -1312,7 +1324,7 @@ check_url() {
     local options="$3"
 
     # Validate inputs
-    if [[ -z "$url" || -z "$tool" ]]; then
+    if [[ -z "${url:-}" ]]; then
         printf "ERROR: URL and tool parameters are required for check_url.\n" >&2
         return 1
     fi
@@ -1349,17 +1361,17 @@ check_url() {
 # shellcheck disable=SC2120
 check_internet() {
     local debug_enabled="false"
-    [[ "$1" == "debug" ]] && debug_enabled="true"
+    [[ "${1:-}" == "debug" ]] && debug_enabled="true"
 
     local primary_url="http://google.com"
     local secondary_url="http://1.1.1.1"
     local proxy_valid=false
 
-    # Debug mode enabled
+    # Debug mode message
     $debug_enabled && logD "Starting internet connectivity checks."
 
-    # Validate proxy settings if a proxy is configured
-    if [[ -n "$http_proxy" || -n "$https_proxy" ]]; then
+    # Validate proxy settings
+    if [[ -n "${http_proxy:-}" || -n "${https_proxy:-}" ]]; then
         $debug_enabled && logD "Proxy detected. Validating proxy configuration."
         if validate_proxy; then
             proxy_valid=true
@@ -1369,38 +1381,48 @@ check_internet() {
         fi
     fi
 
-    # Check internet connectivity with curl
+    # Check connectivity using curl
     if command -v curl &>/dev/null; then
         $debug_enabled && logD "curl is available. Testing internet connectivity using curl."
-        if $proxy_valid && check_url "$primary_url" "curl" "--silent --head --max-time 10 --proxy ${http_proxy:-$https_proxy}"; then
+
+        # Check with proxy
+        if $proxy_valid && curl --silent --head --max-time 10 --proxy "${http_proxy:-${https_proxy:-}}" "$primary_url" &>/dev/null; then
             logI "Internet is available using curl with proxy."
             $debug_enabled && logD "curl successfully connected via proxy."
             return 0
-        elif check_url "$primary_url" "curl" "--silent --head --max-time 10"; then
-            $debug_enabled && logI "Internet is available using curl without proxy."
+        fi
+
+        # Check without proxy
+        if curl --silent --head --max-time 10 "$primary_url" &>/dev/null; then
+            logI "Internet is available using curl without proxy."
             $debug_enabled && logD "curl successfully connected without proxy."
             return 0
-        else
-            $debug_enabled && logD "curl failed to connect."
         fi
+
+        $debug_enabled && logD "curl failed to connect."
     else
         $debug_enabled && logD "curl is not available."
     fi
 
-    # Check internet connectivity with wget
+    # Check connectivity using wget
     if command -v wget &>/dev/null; then
         $debug_enabled && logD "wget is available. Testing internet connectivity using wget."
-        if $proxy_valid && check_url "$primary_url" "wget" "--spider --quiet --timeout=10 --proxy=${http_proxy:-$https_proxy}"; then
+
+        # Check with proxy
+        if $proxy_valid && wget --spider --quiet --timeout=10 --proxy="${http_proxy:-${https_proxy:-}}" "$primary_url" &>/dev/null; then
             logI "Internet is available using wget with proxy."
             $debug_enabled && logD "wget successfully connected via proxy."
             return 0
-        elif check_url "$secondary_url" "wget" "--spider --quiet --timeout=10"; then
+        fi
+
+        # Check without proxy
+        if wget --spider --quiet --timeout=10 "$secondary_url" &>/dev/null; then
             logI "Internet is available using wget without proxy."
             $debug_enabled && logD "wget successfully connected without proxy."
             return 0
-        else
-            $debug_enabled && logD "wget failed to connect."
         fi
+
+        $debug_enabled && logD "wget failed to connect."
     else
         $debug_enabled && logD "wget is not available."
     fi
@@ -1477,9 +1499,9 @@ prepare_log_context() {
 # @return None
 ##
 log_message() {
-    local level="${1^^}"  # Convert log level to uppercase for consistency
-    local message="$2"
-    local details="$3"
+    local level="${1:-DEBUG}"  # Default to "DEBUG" if $1 is unset
+    local message="${2:-<no message>}"  # Default to "<no message>" if $2 is unset
+    local details="${3:-}"  # Default to an empty string if $3 is unset
     local context timestamp lineno custom_level color severity config_severity
 
     # Prepare log context (timestamp and line number)
@@ -1487,7 +1509,7 @@ log_message() {
     IFS="|" read -r timestamp lineno <<< "$context"
 
     # Validate the provided log level and message
-    if [[ -z "$message" || -z "${LOG_PROPERTIES[$level]}" ]]; then
+    if [[ -z "${message:-}" || -z "${LOG_PROPERTIES[$level]:-}" ]]; then
         printf "Invalid log level or empty message in log_message.\n" >&2
         return 1
     fi
@@ -1528,7 +1550,8 @@ log_message() {
 # @param $2 [Optional] Extended details for the log entry.
 ##
 logD() {
-    log_message "DEBUG" "$1" "$2"
+    echo
+    log_message "DEBUG" "${1:-}" "${2:-}"  # Use an empty string as the defaults
 }
 
 ##
@@ -1541,7 +1564,7 @@ logD() {
 # @param $2 [Optional] Extended details for the log entry.
 ##
 logI() {
-    log_message "INFO" "$1" "$2"
+    log_message "INFO" "${1:-}" "${2:-}"  # Use an empty string as the defaults
 }
 
 ##
@@ -1554,7 +1577,7 @@ logI() {
 # @param $2 [Optional] Extended details for the log entry.
 ##
 logW() {
-    log_message "WARNING" "$1" "$2"
+    log_message "WARNING" "${1:-}" "${2:-}"  # Use an empty string as the defaults
 }
 
 ##
@@ -1567,7 +1590,7 @@ logW() {
 # @param $2 [Optional] Extended details for the log entry.
 ##
 logE() {
-    log_message "ERROR" "$1" "$2"
+    log_message "ERROR" "${1:-}" "${2:-}"  # Use an empty string as the defaults
 }
 
 ##
@@ -1580,7 +1603,7 @@ logE() {
 # @param $2 [Optional] Extended details for the log entry.
 ##
 logC() {
-    log_message "CRITICAL" "$1" "$2"
+    log_message "CRITICAL" "${1:-}" "${2:-}"  # Use an empty string as the defaults
 }
 
 ##
@@ -1752,8 +1775,8 @@ generate_separator() {
 ##
 validate_log_level() {
     # Ensure LOG_LEVEL is a valid key in LOG_PROPERTIES
-    if [[ -z "${LOG_PROPERTIES[$LOG_LEVEL]}" ]]; then
-        printf "ERROR: Invalid LOG_LEVEL '%s'. Defaulting to 'INFO'.\n" "$LOG_LEVEL"  >&2 && exit 1
+    if [[ -z "${LOG_PROPERTIES[$LOG_LEVEL]:-}" ]]; then
+        printf "ERROR: Invalid LOG_LEVEL '%s'. Defaulting to 'INFO'.\n" "$LOG_LEVEL" >&2
     fi
 }
 
@@ -1853,8 +1876,7 @@ get_repo_org() {
         organization=$(printf "%s" "$url" | sed -E 's#(git@|https://)([^:/]+)[:/]([^/]+)/.*#\3#')
         printf "%s\n" "$organization"
     else
-        printf "Error: Not inside a Git repository or no remote URL configured.\n" >&2
-        exit 1
+        die 1 "Not inside a Git repository or no remote URL configured."
     fi
 }
 
@@ -1882,8 +1904,7 @@ get_repo_name() {
         repo_name="${repo_name%.git}" # Remove the `.git` suffix.
         printf "%s\n" "$repo_name"
     else
-        printf "Error: Not inside a Git repository or no remote URL configured.\n" >&2
-        exit 1
+        die 1 "Not inside a Git repository or no remote URL configured."
     fi
 }
 
@@ -1899,7 +1920,7 @@ repo_to_title_case() {
     local title_case      # Variable to hold the formatted name
 
     # Validate input
-    if [[ -z "$repo_name" ]]; then
+    if [[ -z "${repo_name:-}" ]]; then
         die 1 "Error: Repository name cannot be empty."
     fi
 
@@ -2074,7 +2095,7 @@ get_proj_params() {
 
         # Get the root directory of the repository
         LOCAL_SOURCE_DIR=$(git rev-parse --show-toplevel 2>/dev/null)
-        if [[ -z "$LOCAL_SOURCE_DIR" ]]; then
+        if [[ -z "${LOCAL_SOURCE_DIR:-}" ]]; then
             die 1 "Not inside a valid Git repository. Ensure the repository is properly initialized."
         fi
 
@@ -2083,7 +2104,7 @@ get_proj_params() {
         LOCAL_SCRIPTS_DIR="$LOCAL_SOURCE_DIR/scripts"
     else
         # Configure remote access URLs
-        if [[ -z "$REPO_ORG" || -z "$REPO_NAME" ]]; then
+        if [[ -z "${REPO_ORG:-}" || -z "${REPO_NAME:-}" ]]; then
             die 1 "Remote mode requires REPO_ORG and REPO_NAME to be set."
         fi
         GIT_RAW="https://raw.githubusercontent.com/$REPO_ORG/$REPO_NAME"
@@ -2109,20 +2130,33 @@ get_proj_params() {
 # @return None
 ##
 start_script() {
-    if [[ "$TERSE" == "true" ]]; then
-        logI "$(repo_to_title_case "$REPO_NAME") installation beginning."
+    if [[ "${TERSE:-false}" == "true" ]]; then
+        logI "$(repo_to_title_case "${REPO_NAME:-Unknown}") installation beginning."
         return
     fi
 
+    # Prompt user for input
     clear
-    printf "\nStarting installation for: %s.\n" "$(repo_to_title_case "$REPO_NAME")"
+    printf "\nStarting installation for: %s.\n" "$(repo_to_title_case "${REPO_NAME:-Unknown}")"
     printf "Press any key to continue or 'Q' to quit (defaulting in 10 seconds).\n"
 
-    read -n 1 -sr -t 10 key
-    clear
-    case "$key" in
-        [Qq]) logI "Installation canceled by user."; exit 0 ;;
-        "") logI "Proceeding with installation by default timeout." ;;
+    # Read a single key with a 10-second timeout
+    if ! read -n 1 -sr -t 10 key < /dev/tty; then
+        key=""  # Assign a default value on timeout
+    fi
+
+    # Handle user input
+    case "${key}" in
+        [Qq])  # Quit
+            logD "Installation canceled by user."
+            exit_script 0
+            ;;
+        "")  # Timeout or Enter
+            logI "No key pressed (timeout or Enter). Proceeding with installation."
+            ;;
+        *)  # Any other key
+            logI "Key pressed: '${key}'. Proceeding with installation."
+            ;;
     esac
 }
 
@@ -2135,7 +2169,8 @@ start_script() {
 ##
 set_time() {
     # Declare local variables
-    local need_set current_date tz yn
+    local need_set=false
+    local current_date tz yn
 
     # Get the current date and time
     current_date="$(date)"
@@ -2204,7 +2239,7 @@ exec_command() {
     complete_pre+=":"
     failed_pre+=":"
 
-    logD "$running_pre '$exec_name'."
+    logI "$running_pre '$exec_name'."
 
     # Log the running line
     if [[ "${USE_CONSOLE}" == "false" ]]; then
@@ -2219,7 +2254,8 @@ exec_command() {
         # Execute the task command, suppress output, and capture result
         result=$(
             {
-                eval "$exec_process" > /dev/null 2>&1
+                result=0
+                eval "$exec_process" > /dev/null 2>&1 || result=$?
                 printf "%s" "$?"
             }
         )
@@ -2304,10 +2340,6 @@ handle_apt_packages() {
     return $error_count
 }
 
-############
-### More Installer Functions Here
-############
-
 ##
 # @brief End the script with optional feedback based on logging configuration.
 # @details Provides a clear message to indicate the script completed successfully.
@@ -2324,6 +2356,13 @@ finish_script() {
 
     clear
     printf "Installation complete: %s.\n" "$(repo_to_title_case "$REPO_NAME")"
+}
+
+exit_script() {
+    local message="${1:-Exiting.}"  # Default message if no argument is provided
+    # clear
+    printf "%s\n" "$message"  # Log the provided or default message
+    exit 0
 }
 
 ############
@@ -2408,6 +2447,10 @@ parse_args() {
         shift
     done
 }
+
+############
+### More Installer Functions Here
+############
 
 ############
 ### Main Functions
