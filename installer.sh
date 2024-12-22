@@ -401,6 +401,34 @@ readonly WARN_STACK_TRACE="${WARN_STACK_TRACE:-false}"  # Default to false if no
 ############
 
 ##
+# @brief Pads a number with spaces.
+# @details Pads the input number with spaces to the left. Defaults to 4 characters wide but accepts an optional width.
+#
+# @param $1 The number to pad (e.g., "7").
+# @param $2 (Optional) The width of the output (default is 4).
+# @return The padded number with spaces as a string.
+##
+pad_with_spaces() {
+    local number="$1"       # Input number
+    local width="${2:-4}"   # Optional width (default is 4)
+
+    # Validate input
+    if [[ -z "$number" || ! "$number" =~ ^[0-9]+$ ]]; then
+        die 1 "Input must be a valid non-negative integer."
+    fi
+
+    if [[ ! "$width" =~ ^[0-9]+$ || "$width" -lt 1 ]]; then
+        die 1 "Error: Width must be a positive integer."
+    fi
+
+    # Strip leading zeroes to prevent octal interpretation
+    number=$((10#$number))  # Forces the number to be interpreted as base-10
+
+    # Format the number with leading spaces and return it as a string
+    printf "%${width}d\n" "$number"
+}
+
+##
 # @brief Print a detailed stack trace of the call hierarchy.
 # @details Outputs the sequence of function calls leading up to the point
 #          where this function was invoked. Supports optional error messages
@@ -423,9 +451,10 @@ stack_trace() {
     local header="------------------ STACK TRACE ------------------"
     local tput_colors_available      # Terminal color support
     local lineno="${BASH_LINENO[0]}" # Line number where the error occurred
+    lineno=$(pad_with_spaces "$lineno") # Pad with zeroes
 
     # Check terminal color support
-    tput_colors_available=$(tput colors 2>/dev/null || echo "0")
+    tput_colors_available=$(tput colors 2>/dev/null || printf "0\n")
 
     # Disable colors if terminal supports less than 8 colors
     if [[ "$tput_colors_available" -lt 8 ]]; then
@@ -474,16 +503,18 @@ stack_trace() {
         printf "%b%s: %s%b\n" "$color" "$label" "$message" "\033[0m" >&2
     else
         # Default message with the line number of the caller
-        local caller_lineno="${BASH_LINENO[1]}"
-        printf "%b%s stack trace called by line: %d%b\n" "$color" "$label" "$caller_lineno" "\033[0m" >&2
+        local lineno="${BASH_LINENO[1]}"
+        lineno=$(pad_with_spaces "$lineno") # Pad with zeroes
+        printf "%b%s stack trace called by line: %s%b\n" "$color" "$label" "$lineno" "\033[0m" >&2
     fi
 
     # Print each function in the stack trace
     for ((i = 2; i < ${#FUNCNAME[@]}; i++)); do
         local script="${BASH_SOURCE[i]##*/}"
-        local caller_lineno="${BASH_LINENO[i - 1]}"
-        printf "%b[%d] Function: %s called at %s:%d%b\n" \
-            "$color" $((i - 1)) "${FUNCNAME[i]}" "$script" "$caller_lineno" "\033[0m" >&2
+        local lineno="${BASH_LINENO[i - 1]}"
+        lineno=$(pad_with_spaces "$lineno") # Pad with zeroes
+        printf "%b[%d] Function: %s called from [%s:%s]%b\n" \
+            "$color" $((i - 1)) "${FUNCNAME[i]}" "$script" "$lineno" "\033[0m" >&2
     done
 
     # Print stack trace footer (line of "-" matching $header)
@@ -511,10 +542,10 @@ stack_trace() {
 warn() {
     local error_level="${1:-0}"  # Default error level is 0
     local level="${2:-WARNING}"  # Default log level is WARNING
-    local message="${3:-A warning was raised on this line (${BASH_LINENO[0]})}"  # Default log message
     local details="${4:-}"  # Default to no additional details
     local lineno="${BASH_LINENO[1]:-0}"  # Line number where the function was called
-
+    lineno=$(pad_with_spaces "$lineno") # Pad with zeroes
+    local message="${3:-A warning was raised on this line $lineno}"  # Default log message
     message="${message}: ($error_level)"
 
     if [[ "$level" == "WARNING" ]]; then
@@ -547,9 +578,10 @@ die() {
     local message                       # Main error message
     local details                       # Additional details
     local lineno="${BASH_LINENO[0]}"    # Line number where the error occurred
-    local script="$THIS_SCRIPT"          # Script name
+    local script="$THIS_SCRIPT"         # Script name
     local level="CRITICAL"              # Error level
-    local tag="${level:0:4}"            # Extracts the first 4 characters (e.g., "CRIT")
+    local tag="CRIT "                   # Extracts the first 4 characters (e.g., "CRIT")
+    lineno=$(pad_with_spaces "$lineno") # Pad with zeroes
 
     # Determine exit status and message
     if ! [[ "$exit_status" =~ ^[0-9]+$ ]]; then
@@ -565,14 +597,14 @@ die() {
 
     # Log the error message only if a message is provided
     if [[ -n "$message" ]]; then
-        printf "[%s]\t[%s:%d]\t%s\n" "$tag" "$script" "$lineno" "$message" >&2
+        printf "[%s]\t[%s:%s]\t%s\n" "$tag" "$script" "$lineno" "$message" >&2
         if [[ -n "$details" ]]; then
-            printf "[%s]\t[%s:%d]\tDetails: %s\n" "$tag" "$script" "$lineno" "$details" >&2
+            printf "[%s]\t[%s:%s]\tDetails: %s\n" "$tag" "$script" "$lineno" "$details" >&2
         fi
     fi
 
     # Log the unrecoverable error
-    printf "[%s]\t[%s:%d]\tUnrecoverable error (exit status: %d).\n" \
+    printf "[%s]\t[%s:%s]\tUnrecoverable error (exit status: %d).\n" \
         "$tag" "$script" "$lineno" "$exit_status" >&2
 
     # Call stack_trace with processed message and error level
@@ -607,7 +639,7 @@ add_dot() {
         input=".$input"
     fi
 
-    echo "$input"
+    printf "%s\n" "$input"
 }
 
 ##
@@ -631,7 +663,7 @@ remove_dot() {
         input="${input#.}"
     fi
 
-    echo "$input"
+    printf "%s\n" "$input"
 }
 
 ##
@@ -655,7 +687,7 @@ add_slash() {
         input="$input/"
     fi
 
-    echo "$input"
+    printf "%s\n" "$input"
 }
 
 ##
@@ -679,7 +711,7 @@ remove_slash() {
         input="${input%/}"
     fi
 
-    echo "$input"
+    printf "%s\n" "$input"
 }
 
 ############
@@ -706,14 +738,14 @@ print_system() {
     if [[ -z "$system_name" ]]; then
         logW "System: Unknown (could not extract system information)." # Warning if system information is unavailable
     else
-        logD "System: $system_name." # Log the system information
+        logI "System: $system_name." # Log the system information
     fi
 }
 
 ##
 # @brief Print the script version and optionally log it.
 # @details This function displays the version of the script stored in the global
-#          variable `SEM_VER`. It uses `echo` if called by `parse_args`, otherwise
+#          variable `SEM_VER`. It uses `printf` if called by `parse_args`, otherwise
 #          it uses `logI`.
 #
 # @global THIS_SCRIPT The name of the script.
@@ -1262,33 +1294,6 @@ validate_proxy() {
         logE "Proxy $proxy_url is unreachable or misconfigured."
         return 1
     fi
-}   
-
-##
-# @brief Interactive prompt to configure proxy settings if needed.
-# @details Asks the user for proxy details if not already configured in the environment.
-#
-# @global http_proxy The HTTP proxy URL (if set).
-# @global https_proxy The HTTPS proxy URL (if set).
-# @global no_proxy The no-proxy domain list (if set).
-#
-# @return None
-##
-configure_proxy() {
-    if [[ -n "$http_proxy" || -n "$https_proxy" ]]; then
-        logI "Existing proxy settings detected: http_proxy=$http_proxy, https_proxy=$https_proxy."
-        return
-    fi
-
-    printf "No proxy settings detected.\n"
-    read -rp "Enter HTTP proxy URL (or leave blank to skip): " proxy_input
-    if [[ -n "$proxy_input" ]]; then
-        export http_proxy="$proxy_input"
-        export https_proxy="$proxy_input"
-        logI "Proxy configured: http_proxy=$http_proxy"
-    else
-        logI "No proxy configured."
-    fi
 }
 
 ##
@@ -1449,9 +1454,10 @@ prepare_log_context() {
 
     # Retrieve the line number of the caller
     lineno="${BASH_LINENO[2]}"
+    lineno=$(pad_with_spaces "$lineno") # Pad with zeroes
 
     # Return the pipe-separated timestamp and line number
-    echo "$timestamp|$lineno"
+    printf "%s|%s\n" "$timestamp" "$lineno"
 }
 
 ##
@@ -1501,13 +1507,13 @@ log_message() {
 
     # Log to file if enabled
     if [[ "$LOG_OUTPUT" == "file" || "$LOG_OUTPUT" == "both" ]]; then
-        printf "[%s] [%s] [%s:%d] %s\n" "$timestamp" "$custom_level" "$THIS_SCRIPT" "$lineno" "$message" >> "$LOG_FILE"
+        printf "[%s] [%s] [%s:%s] %s\n" "$timestamp" "$custom_level" "$THIS_SCRIPT" "$lineno" "$message" >> "$LOG_FILE"
         [[ -n "$details" ]] && printf "[%s] [%s] [%s:%d] Details: %s\n" "$timestamp" "$custom_level" "$THIS_SCRIPT" "$lineno" "$details" >> "$LOG_FILE"
     fi
 
     # Log to console if enabled by `USE_CONSOLE`
     if [[ "$USE_CONSOLE" == "true" ]]; then
-        printf "%b[%s] [%s:%d] %s%b\n" "$color" "$custom_level" "$THIS_SCRIPT" "$lineno" "$message" "$RESET"
+        printf "%b[%s] [%s:%s] %s%b\n" "$color" "$custom_level" "$THIS_SCRIPT" "$lineno" "$message" "$RESET"
         [[ -n "$details" ]] && printf "%bDetails: %s%b\n" "$color" "$details" "$RESET"
     fi
 }
@@ -1593,7 +1599,12 @@ init_log() {
     local homepath log_dir fallback_log
 
     # Get the home directory of the current user
-    homepath=$(getent passwd "${SUDO_USER:-$(whoami)}" | { IFS=':'; read -r _ _ _ _ _ homedir _; echo "$homedir"; })
+    homepath=$(
+        getent passwd "${SUDO_USER:-$(whoami)}" | {
+            IFS=':' read -r _ _ _ _ _ homedir _
+            printf "%s" "$homedir"
+        }
+    )
 
     # Determine the log file location
     LOG_FILE="${LOG_FILE:-$homepath/$scriptname.log}"
@@ -1656,7 +1667,7 @@ generate_terminal_sequence() {
     local result
     # Execute the command and capture its output, suppressing errors.
     result=$("$@" 2>/dev/null || printf "\n")
-    printf "$result"
+    printf "%s" "$result"
 }
 
 ##
@@ -1773,11 +1784,11 @@ setup_log() {
     # Define log properties (severity, colors, and labels)
     declare -gA LOG_PROPERTIES=(
         ["DEBUG"]="DEBUG|${FGCYN}|0"
-        ["INFO"]="INFO|${FGGRN}|1"
+        ["INFO"]="INFO |${FGGRN}|1"
         ["WARNING"]="WARN|${FGYLW}|2"
         ["ERROR"]="ERROR|${FGRED}|3"
-        ["CRITICAL"]="CRIT|${FGMAG}|4"
-        ["EXTENDED"]="EXTD|${FGCYN}|0"
+        ["CRITICAL"]="CRIT |${FGMAG}|4"
+        ["EXTENDED"]="EXTD |${FGCYN}|0"
     )
 
     # Validate the log level and log properties
@@ -1839,8 +1850,8 @@ get_repo_org() {
     if [[ -n "$url" ]]; then
         # Extract the owner or organization name.
         # Supports HTTPS and SSH Git URLs.
-        organization=$(echo "$url" | sed -E 's#(git@|https://)([^:/]+)[:/]([^/]+)/.*#\3#')
-        echo "$organization"
+        organization=$(printf "%s" "$url" | sed -E 's#(git@|https://)([^:/]+)[:/]([^/]+)/.*#\3#')
+        printf "%s\n" "$organization"
     else
         printf "Error: Not inside a Git repository or no remote URL configured.\n" >&2
         exit 1
@@ -1869,7 +1880,7 @@ get_repo_name() {
         # Extract the repository name from the URL and remove the ".git" suffix if present.
         repo_name="${url##*/}"       # Remove everything up to the last `/`.
         repo_name="${repo_name%.git}" # Remove the `.git` suffix.
-        echo "$repo_name"
+        printf "%s\n" "$repo_name"
     else
         printf "Error: Not inside a Git repository or no remote URL configured.\n" >&2
         exit 1
@@ -1889,15 +1900,14 @@ repo_to_title_case() {
 
     # Validate input
     if [[ -z "$repo_name" ]]; then
-        echo "Error: Repository name cannot be empty." >&2
-        return 1
+        die 1 "Error: Repository name cannot be empty."
     fi
 
     # Replace underscores and hyphens with spaces and convert to title case
-    title_case=$(echo "$repo_name" | tr '_-' ' ' | awk '{for (i=1; i<=NF; i++) $i=toupper(substr($i,1,1)) substr($i,2)}1')
+    title_case=$(printf "%s" "$repo_name" | tr '_-' ' ' | awk '{for (i=1; i<=NF; i++) $i=toupper(substr($i,1,1)) substr($i,2)}1')
 
     # Output the result
-    echo "$title_case"
+    printf "%s\n" "$title_case"
 }
 
 # @brief Retrieve the current Git branch name or the branch this was detached from.
@@ -1918,7 +1928,7 @@ get_git_branch() {
 
     if [[ -n "$branch" && "$branch" != "HEAD" ]]; then
         # Print the branch name if available and not in a detached HEAD state.
-        echo "$branch"
+        printf "%s\n" "$branch"
     elif [[ "$branch" == "HEAD" ]]; then
         # Handle the detached HEAD state: attempt to determine the source.
         detached_from=$(git reflog show --pretty='%gs' | grep -oE 'checkout: moving from [^ ]+' | head -n 1 | awk '{print $NF}')
@@ -1940,7 +1950,7 @@ get_last_tag() {
     # Retrieve the most recent Git tag
     tag=$(git describe --tags --abbrev=0 2>/dev/null)
 
-    echo "$tag"
+    printf "%s\n" "$tag"
 }
 
 # @brief Check if a tag follows semantic versioning.
@@ -1951,9 +1961,9 @@ is_sem_ver() {
 
     # Validate if the tag follows the semantic versioning format (major.minor.patch)
     if [[ "$tag" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-        echo "true"
+        printf "true\n"
     else
-        echo "false"
+        printf "false\n"
     fi
 }
 
@@ -1964,9 +1974,9 @@ get_num_commits() {
     local tag="$1" commit_count
 
     # Count the number of commits since the given tag
-    commit_count=$(git rev-list --count "${tag}..HEAD" 2>/dev/null || echo 0)
+    commit_count=$(git rev-list --count "${tag}..HEAD" 2>/dev/null || printf "0\n")
 
-    echo "$commit_count"
+    printf "%s\n" "$commit_count"
 }
 
 # @brief Get the short hash of the current Git commit.
@@ -1977,7 +1987,7 @@ get_short_hash() {
     # Retrieve the short hash of the current Git commit
     short_hash=$(git rev-parse --short HEAD 2>/dev/null)
 
-    echo "$short_hash"
+    printf "%s\n" "$short_hash"
 }
 
 # @brief Check if there are uncommitted changes in the working directory.
@@ -1989,9 +1999,9 @@ get_dirty() {
     changes=$(git status --porcelain 2>/dev/null)
 
     if [[ -n "$changes" ]]; then
-        echo "true"
+        printf "true\n"
     else
-        echo "false"
+        printf "false\n"
     fi
 }
 
@@ -2030,7 +2040,7 @@ get_sem_ver() {
         version_string="$version_string-dirty"
     fi
 
-    echo "$version_string"
+    printf "%s\n" "$version_string"
 }
 
 #/**
@@ -2198,7 +2208,7 @@ exec_command() {
 
     # Log the running line
     if [[ "${USE_CONSOLE}" == "false" ]]; then
-        printf "%b[-]%b\t%s %s.\n" "$FGGLD" "$RESET" "$running_pre" "$exec_name"
+        printf "%b[-]%b\t%s %s.\n" "${FGGLD}${BOLD}" "$RESET" "$running_pre" "$exec_name"
     fi
 
     # If it's a DRY_RUN just use sleep
@@ -2207,26 +2217,31 @@ exec_command() {
         result=0 # Simulate success
     else
         # Execute the task command, suppress output, and capture result
-        result=$({ eval "$exec_process" > /dev/null 2>&1; echo $?; })
+        result=$(
+            {
+                eval "$exec_process" > /dev/null 2>&1
+                printf "%s" "$?"
+            }
+        )
     fi
 
     # Move the cursor up and clear the entire line if USE_CONSOLE is false
     if [[ "${USE_CONSOLE}" == "false" ]]; then
-        printf "\033[A\033[2K"
+        printf "%s" "$MOVE_UP"
     fi
 
     # Handle success or failure
     if [ "$result" -eq 0 ]; then
         # Success case
         if [[ "${USE_CONSOLE}" == "false" ]]; then
-            printf "\033[1;32m[✔]\033[0m\t %s.\n" "$complete_pre" "$exec_name"
+            printf "%b[✔]%b\t %s.\n" "${FGGRN}${BOLD}" "${RESET}" "$complete_pre" "$exec_name"
         fi
         logI "$complete_pre $exec_name"
         return 0 # Success (true)
     else
         # Failure case
         if [[ "${USE_CONSOLE}" == "false" ]]; then
-            printf "\033[1;31m[✘]\033[0m\t%s %s (%s).\n" "$failed_pre" "$exec_name" "$result"
+            printf "%b[✘]%b\t%s %s (%s).\n" "${FGRED}${BOLD}" "${RESET}" "$failed_pre" "$exec_name" "$result"
         fi
         logE "$failed_pre $exec_name"
         return 1 # Failure (false)
@@ -2385,7 +2400,7 @@ parse_args() {
                 USE_CONSOLE="true"
                 ;;
             *)
-                echo "Unknown option: $1"
+                printf "Unknown option: %s\n" "$1"
                 usage
                 exit 1
                 ;;
